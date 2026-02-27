@@ -1,0 +1,76 @@
+# Xcode
+#
+# gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
+
+## User settings
+xcuserdata/
+
+## compatibility with Xcode 8 and earlier (ignoring these is generally safe)
+*.mode1v3
+*.mode2v3
+*.pbxuser
+!default.pbxuser
+*.perspectivev3
+!default.perspectivev3
+*.xcuserstate
+
+## Project-wide
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+## Build generated
+build/
+DerivedData/
+
+## Miscellaneous
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+
+## Obj-C/Swift specific
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+## Playground
+timeline.xctimeline
+playground.xcworkspace
+
+## Swift Package Manager
+# Add this line if you want to avoid checking in your Package.resolved file
+# Package.resolved
+.build/
+
+## CocoaPods
+# We recommend against adding the Pods directory to your .gitignore. However
+# you should judge for yourself, the pros and cons are mentioned at:
+# https://guides.cocoapods.org/using/using-cocoapods.html#should-i-check-the-pods-directory-into-source-control
+#
+# Pods/
+#
+# Add this line if you want to avoid checking in Podfile.lock (is not recommended)
+# Podfile.lock
+
+## Carthage
+# Carthage/
+
+## fastlane
+# It is recommended to not store the screenshots in the git repo.
+# fastlane/report.xml
+# fastlane/screenshots
+# fastlane/test_output
+
+## Bundle artifact
+*.zip
+
+## Code injection
+# iOSInjectionProject/
+
+.build-ios/
+.build-ios-device/

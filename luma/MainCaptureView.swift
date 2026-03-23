@@ -36,6 +36,11 @@ struct MainCaptureView: View {
     @State private var captureFlashOpacity = 0.0
     @State private var isPrivacyPresented = false
     @State private var activeScreen: UIScreen?
+    @State private var brightnessIndicatorOpacity: Double = 0
+    @State private var displayedBrightness: Double = 50
+    @State private var isAdjustingBrightness = false
+    @State private var gestureStartIntensity: Double = 0.5
+    @State private var gestureStartLocation: CGPoint = .zero
 
     var body: some View {
         ZStack {
@@ -48,6 +53,12 @@ struct MainCaptureView: View {
 
             topSafeAreaMask
             previewWindowLayer
+            
+            // 亮度滑块指示器
+            if isAdjustingBrightness {
+                brightnessSliderOverlay
+            }
+            
             Color.white
                 .opacity(captureFlashOpacity)
                 .ignoresSafeArea()
@@ -59,6 +70,7 @@ struct MainCaptureView: View {
             .opacity(0.01)
             .allowsHitTesting(false)
 
+            brightnessIndicator
             controlsPanel
         }
         .background(Color.black)
@@ -69,17 +81,11 @@ struct MainCaptureView: View {
             if viewModel.cameraAuthorized {
                 cameraController.configureIfNeeded()
             }
-            applyScreenBrightness()
+            UIApplication.shared.isIdleTimerDisabled = true
         }
         .onChange(of: viewModel.cameraAuthorized) { _, isAuthorized in
             guard isAuthorized else { return }
             cameraController.configureIfNeeded()
-        }
-        .onChange(of: viewModel.isFillLightEnabled) { _, _ in
-            applyScreenBrightness()
-        }
-        .onChange(of: viewModel.intensity) { _, _ in
-            applyScreenBrightness()
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
@@ -88,10 +94,8 @@ struct MainCaptureView: View {
             guard viewModel.cameraAuthorized else { return }
             if phase == .active {
                 cameraController.startRunning()
-                applyScreenBrightness()
             } else if phase == .background {
                 cameraController.stopRunning()
-                restoreScreenBrightnessIfNeeded()
             }
         }
         .onDisappear {
@@ -100,6 +104,70 @@ struct MainCaptureView: View {
         .sheet(isPresented: $isPrivacyPresented) {
             PrivacyPolicyView()
         }
+    }
+
+    private var brightnessIndicator: some View {
+        VStack {
+            Spacer()
+            HStack {
+                Spacer()
+                VStack(spacing: 4) {
+                    Image(systemName: "sun.max.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.white)
+                    Text("\(Int(displayedBrightness))%")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white)
+                }
+                .padding(12)
+                .background(.ultraThinMaterial)
+                .clipShape(Capsule())
+                .opacity(brightnessIndicatorOpacity)
+                .padding(.trailing, 20)
+                .padding(.bottom, 200)
+            }
+        }
+    }
+
+    private var brightnessSliderOverlay: some View {
+        GeometryReader { geometry in
+            let _: CGFloat = geometry.size.height * 0.55
+            
+            ZStack {
+                // 半透明遮罩
+                Color.black.opacity(0.25)
+                    .ignoresSafeArea()
+                
+                // 右侧简洁亮度显示（小尺寸）
+                HStack {
+                    Spacer()
+                    VStack(spacing: 0) {
+                        Spacer()
+                        
+                        // 小尺寸亮度百分比
+                        VStack(spacing: 4) {
+                            Image(systemName: "sun.max.fill")
+                                .font(.system(size: 14))
+                                .foregroundStyle(viewModel.selectedStyle.colors.first ?? .white)
+                            
+                            Text("\(Int(displayedBrightness))")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(.white)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(.ultraThinMaterial)
+                        .clipShape(Capsule())
+                        
+                        Spacer()
+                    }
+                    .padding(.trailing, 20)
+                }
+            }
+        }
+        .background(Color.clear)
+        .opacity(isAdjustingBrightness && !isControlsExpanded ? 1 : 0)
+        .transition(.opacity)
     }
 
     private var previewWindowLayer: some View {
@@ -190,6 +258,7 @@ struct MainCaptureView: View {
                         intensitySlider
                         styleDescriptionRow
                         cameraBasicConfigSection
+                        extraSettingsSection
                         privacyEntryButton
                     }
                     .padding(.horizontal, 14)
@@ -312,14 +381,18 @@ struct MainCaptureView: View {
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.86))
                 Spacer()
-                Text("\(Int(viewModel.intensity * 100))%")
+                Text("\(Int(displayedBrightness))%")
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.72))
             }
 
-            Slider(value: $viewModel.intensity, in: 0.55...1.0, step: 0.01)
+            Slider(value: $viewModel.intensity, in: 0.0...1.0, step: 0.01)
                 .tint(.white)
                 .disabled(!viewModel.isFillLightEnabled)
+                .onChange(of: viewModel.intensity) { _, newValue in
+                    displayedBrightness = newValue * 100
+                    applyScreenBrightness()
+                }
         }
     }
 
@@ -337,6 +410,39 @@ struct MainCaptureView: View {
             aspectRatioCycleButton
         }
         .padding(.top, 2)
+    }
+
+    private var extraSettingsSection: some View {
+        HStack(spacing: 10) {
+            mirrorFlipButton
+            Spacer()
+        }
+        .padding(.top, 2)
+    }
+
+    private var mirrorFlipButton: some View {
+        Button {
+            isPreviewMirrored.toggle()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: isPreviewMirrored ? "arrow.left.and.right.righttriangle.left.righttriangle.right.fill" : "arrow.left.and.right.righttriangle.left.righttriangle.right")
+                    .font(.caption)
+                Text("镜像")
+                    .font(.caption)
+                Spacer(minLength: 0)
+                Image(systemName: isPreviewMirrored ? "checkmark" : "")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.74))
+            }
+            .foregroundStyle(.white.opacity(0.94))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.white.opacity(0.07))
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private var liveModeCycleButton: some View {
@@ -449,58 +555,82 @@ struct MainCaptureView: View {
         return "rectangle.portrait"
     }
 
-    private var horizontalStyleSwitchGesture: some Gesture {
-        DragGesture(minimumDistance: 24)
-            .onEnded { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                if value.translation.width < -36 {
-                    viewModel.selectNextStyle()
-                } else if value.translation.width > 36 {
-                    viewModel.selectPreviousStyle()
-                }
-            }
-    }
-
     private var globalInteractionGesture: some Gesture {
-        DragGesture(minimumDistance: 24)
-            .onEnded { value in
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
                 let dx = value.translation.width
                 let dy = value.translation.height
                 let screenHeight = activeScreen?.bounds.height ?? 0
                 let panelThreshold: CGFloat = isControlsExpanded ? 0.55 : 0.8
                 let inControlsZone = screenHeight > 0 && value.startLocation.y >= screenHeight * panelThreshold
 
+                // 初始化手势起点
+                if gestureStartLocation == .zero {
+                    gestureStartLocation = value.startLocation
+                    gestureStartIntensity = viewModel.intensity
+                }
+                
                 if inControlsZone {
                     guard abs(dy) > abs(dx), abs(dy) > 30 else { return }
-                    if dy < 0 {
+                    if dy < -30 && !isControlsExpanded {
                         isControlsExpanded = true
-                    } else {
+                    } else if dy > 30 && isControlsExpanded {
                         isControlsExpanded = false
                     }
                     return
                 }
 
-                guard abs(dx) > abs(dy), abs(dx) > 36 else { return }
-                if dx < 0 {
-                    viewModel.selectNextStyle()
-                } else {
-                    viewModel.selectPreviousStyle()
+                // 上下滑调整亮度 - 基于起点的增量，丝滑跟手
+                if abs(dy) > abs(dx) && abs(dy) > 8 {
+                    // 显示亮度指示器（面板展开时不显示）
+                    if !isAdjustingBrightness && !isControlsExpanded {
+                        isAdjustingBrightness = true
+                    }
+                    
+                    // 使用相对于起点的增量
+                    let screenHeight = UIScreen.main.bounds.height
+                    let fullSwipeDistance = screenHeight * 0.66
+                    let delta = -dy / fullSwipeDistance
+                    let newIntensity = max(0, min(1, gestureStartIntensity + delta))
+                    
+                    viewModel.intensity = newIntensity
+                    displayedBrightness = newIntensity * 100
+                    return
                 }
+
+                // 左右滑切换风格 - 需要更大距离避免误触
+                if abs(dx) > abs(dy) && abs(dx) > 50 && abs(dy) < 20 {
+                    if dx < -50 {
+                        viewModel.selectNextStyle()
+                        // 重置手势起点
+                        gestureStartLocation = .zero
+                        gestureStartIntensity = viewModel.intensity
+                    } else if dx > 50 {
+                        viewModel.selectPreviousStyle()
+                        // 重置手势起点
+                        gestureStartLocation = .zero
+                        gestureStartIntensity = viewModel.intensity
+                    }
+                }
+            }
+            .onEnded { _ in
+                // 隐藏亮度滑块
+                withAnimation(.easeOut(duration: 0.3)) {
+                    isAdjustingBrightness = false
+                }
+                // 重置手势起点
+                gestureStartLocation = .zero
             }
     }
 
     private func applyScreenBrightness() {
+        // 只记录原始亮度，不改变它（亮度只影响补光overlay）
         updateActiveScreen()
         guard let screen = activeScreen else { return }
         if originalScreenBrightness == nil {
             originalScreenBrightness = screen.brightness
         }
-        guard viewModel.isFillLightEnabled else {
-            restoreScreenBrightnessIfNeeded()
-            return
-        }
-        let target = max(CGFloat(viewModel.intensity) + 0.15, 0.95)
-        screen.brightness = min(target, 1.0)
+        // 不再改变实际屏幕亮度，只通过overlayOpacity来调整补光效果
     }
 
     private func restoreScreenBrightnessIfNeeded() {
